@@ -10,6 +10,6 @@ public class ExampleRoute extends RouteBuilder {
   @Override
   public void configure() throws Exception {
     from(timer("foo").period(1000))
-          .to(kafka("test").brokers("kafka-1:19092"));
+          .to(kafka("test"));
   }
 }
