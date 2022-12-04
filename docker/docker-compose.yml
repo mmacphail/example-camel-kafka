@@ -1,0 +1,324 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+version: '3'
+services:
+  grafana:
+    image: "grafana/grafana:${GRAFANA_VERSION}"
+    ports:
+      - "3000:3000"
+    environment:
+      GF_PATHS_DATA: /var/lib/grafana
+      GF_SECURITY_ADMIN_PASSWORD: kafka
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    container_name: grafana
+    depends_on:
+      - prometheus
+    networks:
+      - kafka
+
+  prometheus:
+    image: "prom/prometheus:${PROMETHEUS_VERSION}"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command: "--config.file=/etc/prometheus/prometheus.yml"
+    container_name: prometheus
+    networks:
+      - kafka
+
+  jmx-kafka101:
+    image: "sscaling/jmx-prometheus-exporter:${JMX_EXPORTER_VERSION}"
+    environment:
+      CONFIG_YML: "/etc/jmx_exporter/config.yml"
+      JVM_OPTS: "-Xmx256M -Xms256M"
+    volumes:
+      - ./etc/jmx_exporter/config_kafka101.yml:/etc/jmx_exporter/config.yml
+    container_name: jmx-kafka101
+    depends_on:
+      - kafka101
+    networks:
+      - kafka
+
+  jmx-kafka102:
+    image: "sscaling/jmx-prometheus-exporter:${JMX_EXPORTER_VERSION}"
+    environment:
+      CONFIG_YML: "/etc/jmx_exporter/config.yml"
+      JVM_OPTS: "-Xmx256M -Xms256M"
+    volumes:
+      - ./etc/jmx_exporter/config_kafka102.yml:/etc/jmx_exporter/config.yml
+    container_name: jmx-kafka102
+    depends_on:
+      - kafka102
+    networks:
+      - kafka
+
+  jmx-kafka103:
+    image: "sscaling/jmx-prometheus-exporter:${JMX_EXPORTER_VERSION}"
+    environment:
+      CONFIG_YML: "/etc/jmx_exporter/config.yml"
+      JVM_OPTS: "-Xmx256M -Xms256M"
+    volumes:
+      - ./etc/jmx_exporter/config_kafka103.yml:/etc/jmx_exporter/config.yml
+    container_name: jmx-kafka103
+    depends_on:
+      - kafka103
+    networks:
+      - kafka
+  
+  create-topic:
+    image: confluentinc/cp-kafka:${CONFLUENT_VERSION}
+    restart: on-failure
+    depends_on:
+      - kafka101
+      - kafka102
+      - kafka103
+    command:
+      - /bin/sh
+      - -c
+      - |
+        sleep 20
+        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic contrat --replication-factor 3 --partitions 10
+        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic prm --replication-factor 3 --partitions 10
+        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic compteur --replication-factor 3 --partitions 10
+        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic situationContractuelle --replication-factor 3 --partitions 10 --config cleanup.policy=compact
+        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic contratUppercase --replication-factor 3 --partitions 10 --config cleanup.policy=compact
+    container_name: create-topic
+    networks:
+      - kafka
+
+  zk1:
+    image: confluentinc/cp-zookeeper:${CONFLUENT_VERSION}
+    environment:
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_SERVERS: "zk1:2888:3888;zk2:2888:3888;zk3:2888:3888"
+      #ZOOKEEPER_LOG4J_ROOT_LOGLEVEL: DEBUG
+    container_name: zk1
+    networks:
+      - kafka
+
+  zk2:
+    image: confluentinc/cp-zookeeper:${CONFLUENT_VERSION}
+    environment:
+      ZOOKEEPER_SERVER_ID: 2
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_SERVERS: "zk1:2888:3888;zk2:2888:3888;zk3:2888:3888"
+      #ZOOKEEPER_LOG4J_ROOT_LOGLEVEL: DEBUG
+    container_name: zk2
+    networks:
+      - kafka
+
+  zk3:
+    image: confluentinc/cp-zookeeper:${CONFLUENT_VERSION}
+    environment:
+      ZOOKEEPER_SERVER_ID: 3
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_SERVERS: "zk1:2888:3888;zk2:2888:3888;zk3:2888:3888"
+      #ZOOKEEPER_LOG4J_ROOT_LOGLEVEL: DEBUG
+    container_name: zk3
+    networks:
+      - kafka
+
+  kafka101:
+    image: confluentinc/cp-kafka:${CONFLUENT_VERSION}
+    restart: on-failure
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+    ports:
+      - "19092:19092"
+    environment:
+      KAFKA_BROKER_ID: 101
+      KAFKA_JMX_PORT: 9991
+      KAFKA_ZOOKEEPER_CONNECT: zk1:2181,zk2:2181,zk3:2181
+      KAFKA_ADVERTISED_LISTENERS: DOCKER://kafka101:9092,HOST://kafka-1:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: DOCKER:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_LISTENERS: DOCKER://:9092,HOST://:19092
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      # KAFKA_LOG4J_ROOT_LOGLEVEL: DEBUG
+      # KAFKA_TOOLS_LOG4J_LOGLEVEL: DEBUG
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+      CONFLUENT_METRICS_ENABLE: 'false'
+    container_name: kafka101
+    healthcheck:
+      test: nc -z localhost 9092
+      interval: 2s
+      timeout: 2s
+      retries: 3
+      start_period: 2s
+    networks:
+      - kafka
+
+  kafka102:
+    image: confluentinc/cp-kafka:${CONFLUENT_VERSION}
+    restart: on-failure
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 102
+      KAFKA_JMX_PORT: 9992
+      KAFKA_ZOOKEEPER_CONNECT: zk1:2181,zk2:2181,zk3:2181
+      KAFKA_ADVERTISED_LISTENERS: DOCKER://kafka102:9092,HOST://kafka-2:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: DOCKER:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_LISTENERS: DOCKER://:9092,HOST://:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      # KAFKA_LOG4J_ROOT_LOGLEVEL: DEBUG
+      # KAFKA_TOOLS_LOG4J_LOGLEVEL: DEBUG
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+      CONFLUENT_METRICS_ENABLE: 'false'
+    container_name: kafka102
+    healthcheck:
+      test: nc -z localhost 9092
+      interval: 2s
+      timeout: 2s
+      retries: 3
+      start_period: 2s
+    networks:
+      - kafka
+
+  kafka103:
+    image: confluentinc/cp-kafka:${CONFLUENT_VERSION}
+    restart: on-failure
+    depends_on:
+      - zk1
+      - zk2
+      - zk3
+    ports:
+      - "39092:39092"
+    environment:
+      KAFKA_BROKER_ID: 103
+      KAFKA_JMX_PORT: 9993
+      KAFKA_ZOOKEEPER_CONNECT: zk1:2181,zk2:2181,zk3:2181
+      KAFKA_ADVERTISED_LISTENERS: DOCKER://kafka103:9092,HOST://kafka-3:39092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: DOCKER:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_LISTENERS: DOCKER://:9092,HOST://:39092
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      # KAFKA_LOG4J_ROOT_LOGLEVEL: DEBUG
+      # KAFKA_TOOLS_LOG4J_LOGLEVEL: DEBUG
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+      CONFLUENT_METRICS_ENABLE: 'false'
+    container_name: kafka103
+    healthcheck:
+      test: nc -z localhost 9092
+      interval: 2s
+      timeout: 2s
+      retries: 3
+      start_period: 2s
+    networks:
+      - kafka
+
+  akhq:
+    image: tchiotludo/akhq:${AKHQ_VERSION}
+    depends_on:
+      - kafka101
+      - kafka102
+      - kafka103
+    environment:
+      AKHQ_CONFIGURATION: |
+        micronaut:
+         server:
+           cors:
+             enabled: true
+        akhq:
+          connections:
+            docker-kafka-server:
+              properties:
+                bootstrap.servers: "kafka101:9092,kafka102:9092,kafka103:9092"
+    ports:
+      - 8085:8080
+    container_name: akhq
+    networks:
+      - kafka
+
+  kafka-lag-exporter:
+    image: lightbend/kafka-lag-exporter:0.6.8
+    container_name: kafka-lag-exporter
+    depends_on:
+      - kafka101
+      - kafka102
+      - kafka103
+    command:
+      - /opt/docker/bin/kafka-lag-exporter
+      - -Dconfig.file=/opt/docker/conf/application.conf
+    volumes:
+      - ./etc/lag_exporter/application.conf:/opt/docker/conf/application.conf
+    networks:
+      - kafka
+
+  situation-contractuelle-stream:
+    image: enedis-camel-situation-contractuelle:0.0.22
+    container_name: situation-contractuelle-stream
+    depends_on:
+      - kafka101
+      - kafka102
+      - kafka103
+      - create-topic
+    environment:
+      SPRING_GENERATEFAKEDATA: "true"
+      SPRING_NUMBEROFPRM: "300_000"
+      SPRING_NUMBEROFGENERATIONS: "300_000"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka101:9092,kafka102:9092,kafka103:9092
+      CAMEL_KAFKA_BROKERS: kafka101:9092,kafka102:9092,kafka103:9092
+      JAVA_TOOL_OPTIONS: "-Xms3G -Xmx5G -XX:MaxDirectMemorySize=2g"
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.80'
+          memory: 10GB
+        reservations:
+          memory: 5GB
+    networks:
+      - kafka
+
+networks:
+  kafka:
+    driver: bridge
