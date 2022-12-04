@@ -92,11 +92,8 @@ services:
       - -c
       - |
         sleep 20
-        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic contrat --replication-factor 3 --partitions 10
-        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic prm --replication-factor 3 --partitions 10
-        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic compteur --replication-factor 3 --partitions 10
-        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic situationContractuelle --replication-factor 3 --partitions 10 --config cleanup.policy=compact
-        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic contratUppercase --replication-factor 3 --partitions 10 --config cleanup.policy=compact
+        kafka-topics --bootstrap-server kafka101:9092,kafka102:9092,kafka103:9092 --create --topic test --replication-factor 
+        3 --partitions 10
     container_name: create-topic
     networks:
       - kafka
@@ -289,33 +286,6 @@ services:
       - -Dconfig.file=/opt/docker/conf/application.conf
     volumes:
       - ./etc/lag_exporter/application.conf:/opt/docker/conf/application.conf
-    networks:
-      - kafka
-
-  situation-contractuelle-stream:
-    image: enedis-camel-situation-contractuelle:0.0.22
-    container_name: situation-contractuelle-stream
-    depends_on:
-      - kafka101
-      - kafka102
-      - kafka103
-      - create-topic
-    environment:
-      SPRING_GENERATEFAKEDATA: "true"
-      SPRING_NUMBEROFPRM: "300_000"
-      SPRING_NUMBEROFGENERATIONS: "300_000"
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka101:9092,kafka102:9092,kafka103:9092
-      CAMEL_KAFKA_BROKERS: kafka101:9092,kafka102:9092,kafka103:9092
-      JAVA_TOOL_OPTIONS: "-Xms3G -Xmx5G -XX:MaxDirectMemorySize=2g"
-    ports:
-      - "8080:8080"
-    deploy:
-      resources:
-        limits:
-          cpus: '0.80'
-          memory: 10GB
-        reservations:
-          memory: 5GB
     networks:
       - kafka
 
